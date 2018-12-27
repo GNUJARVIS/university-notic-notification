@@ -1,0 +1,150 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <signal.h>
+#include <sys/wait.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+
+#define BUF_SIZE 2048                                   //사이즈 동적할당
+void error_handling(char *message);
+void read_childproc(int sig);
+
+
+
+int main(int argc, char *argv[])
+{
+
+        int serv_sock, clnt_sock;                                               //서버소켓과 클라이언
+트소켓의 파일 디스크립터를 저장할 그릇
+        struct sockaddr_in serv_adr, clnt_adr;                                  //소켓의 주소체계를 >담당할 서버와 클라이언트 소켓 구조체 선언
+
+        pid_t pid;                                                              //fork를 사용하기 위>한 pid를 담을 그릇
+
+        struct sigaction act;                                                   //sigaction 할당
+
+        socklen_t adr_sz;                                                       //accept 할때 두번재 매개변수로 전달된 주소의 변수 크기를 전달.
+
+        int state;
+        int str_len2;
+        char buf[BUF_SIZE];
+
+        if(argc != 2){
+                printf("Usage : %s <port>\n", argv[0]);
+        exit(1);
+        }
+
+
+        act.sa_handler = read_childproc;
+        sigemptyset(&act.sa_mask);
+        act.sa_flags = 0;
+        state = sigaction(SIGCHLD, &act, 0);                                    //시그널을 초기화 하>고 등록 child가 사라질때 시그널 전송하여 끝난 프로세스 회수.
+
+
+        serv_sock = socket(PF_INET, SOCK_STREAM, 0);                            //socket 함수 호출을 통하여 소켓 생성
+
+        memset(&serv_adr, 0, sizeof(serv_adr));
+        serv_adr.sin_family = AF_INET;
+        serv_adr.sin_addr.s_addr = htonl(INADDR_ANY);
+        serv_adr.sin_port = htons(atoi(argv[1]));                               //소켓 주소체계  초기
+화 serv_adr 에다
+        if(bind(serv_sock, (struct sockaddr*)&serv_adr, sizeof(serv_adr)) == -1)
+                error_handling("bind() error");
+        if(listen(serv_sock, 10) == -1)
+                error_handling("listen() error");
+/*
+        char txt[BUF_SIZE],res;
+
+        FILE *f;
+        f=fopen("/home/taehoon/share_memory/share.txt","rt");
+        int i = 0;      
+        while(1){
+                res = fgetc(f);
+                if(res==EOF)
+                        break;
+                //putchar(res);
+                txt[i] =txt[i]+ res;
+                i++;
+        }
+        fclose(f);
+        printf("%s\n",txt);
+*/
+
+
+        while(1)
+        {
+
+                adr_sz = sizeof(clnt_adr);
+                clnt_sock = accept(serv_sock, (struct sockaddr*)&clnt_adr, &adr_sz);
+                if(clnt_sock == -1)
+                        continue;
+                else
+                        puts("New client connected....\n");
+
+                pid = fork();
+                if(pid == -1)
+                {
+                        close(clnt_sock);
+                        continue;
+                }
+                if(pid == 0)
+                {
+                        close(serv_sock);
+                        char txt[20];
+
+                        FILE *f;
+                        f=fopen("/home/taehoon/share_memory/share.txt","rt");
+/*
+                        int i = 0 ;
+                        while(i<5){
+
+                                char txt[10];
+                                fgets(txt, sizeof(txt),f);                      
+                                printf("%s\n", txt);
+                                write(clnt_sock,txt,sizeof(txt));
+                        }
+*/
+                        fgets(txt,sizeof(txt),f);
+                        write(clnt_sock,txt,sizeof(txt));
+
+
+
+
+
+
+
+                        fclose(f);
+
+                        printf("sent to client\n");
+                        //printf("%s\n",txt);   
+
+                        sleep(50);
+
+                        close(clnt_sock);
+                        puts("Client disconnected....\n");
+                        return 0;                                               //chlid process가 끝>나는 지점.  SIGCHILD 가 발송이 된다.
+                }
+                else
+                close(clnt_sock);
+        }
+        close(serv_sock);
+        return 0;
+}
+
+void read_childproc(int sig)
+{
+        pid_t pid;
+        int status;
+        pid = waitpid(-1, &status, WNOHANG);
+        printf("removed proc id : %d\n", pid);
+}
+
+void error_handling(char *message)
+{
+        fputs(message, stderr);
+        fputc('\n', stderr);
+        exit(1);
+}
+                                           
